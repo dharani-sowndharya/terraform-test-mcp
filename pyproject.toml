@@ -1,0 +1,13 @@
+[project]
+name = "terraform-test-mcp"
+version = "0.1.0"
+description = "Terraform test case generator MCP server for Claude Code"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "mcp>=1.9.1",
+]
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"

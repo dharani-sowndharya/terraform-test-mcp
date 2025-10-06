@@ -1,0 +1,18 @@
+services:
+  terraform-test-mcp:
+    build: .
+    container_name: terraform-test-mcp-server
+    volumes:
+      # Mount the terraform repository for analysis and test generation
+      # This should be set to the actual terraform project path
+      - ${TERRAFORM_REPO_PATH}:/terraform-repo
+    environment:
+      - MCP_SERVER_NAME=terraform-test-mcp
+      - PYTHONUNBUFFERED=1
+    # For stdio transport (default MCP mode)
+    stdin_open: true
+    tty: true
+    # Uncomment below if using TCP transport
+    # ports:
+    #   - "8000:8000"
+    restart: unless-stopped
