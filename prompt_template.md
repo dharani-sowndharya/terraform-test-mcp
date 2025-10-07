@@ -162,6 +162,17 @@ run "test_security_group" {
     error_message = "This will always fail with plan command"
   }
 }
+
+run "test_caller_identity" {
+  command = plan  # ← Plan cannot access computed attributes!
+
+  assert {
+    condition     = data.aws_caller_identity.current.account_id == "123456789012"  # ← FAILS!
+    error_message = "This will always fail with plan command"
+  }
+}
+
+
 ```
 
 **Why this fails:** `aws_security_group.lambda_sg.name_prefix` is a computed attribute only available after resource creation (apply), not during planning.
@@ -328,6 +339,91 @@ run "environment_secret_naming_consistency" {
     error_message = "Environment should be properly set for secret naming"
   }
 }
+
+ ### 🛑 MANDATORY PRE-GENERATION VALIDATION CHECKLIST for variable validation🛑
+
+  Before writing ANY assert statement, answer these questions:
+
+  1. **Am I testing user-provided input against itself?**
+     - ❌ BAD: `var.instance_type == "t3.micro"` (when you set instance_type = "t3.micro" in the variables section)
+
+  2. **What am I actually validating?**
+     - ✅ Conditional logic (if/else, ternary operators, count logic)
+     - ✅ Computed values (locals, concatenations, merges)
+     - ✅ Resource relationships (dependencies, references)
+     - ✅ Business rules (size limits, naming patterns, required combinations)
+     - ✅ Variable validations by using `expect failures` in case of wrong inputs
+     - ❌ NOT: Variable equals the value I just set it to
+
+  ### Examples of MEANINGFUL vs MEANINGLESS Tests:
+
+  #### ❌ MEANINGLESS (DO NOT DO THIS):
+  ```hcl
+  variables {
+    environment = "dev"
+  }
+
+  assert {
+    condition = var.environment == "dev"  # ← You just set this!
+    error_message = "Environment should be dev"
+  }
+
+  ✅ MEANINGFUL (DO THIS):
+
+  variables {
+    create_security_group = true
+    additional_security_group_ids = ["sg-123"]
+  }
+
+  assert {
+    # Tests the LOGIC in: concat([aws_security_group.ec2[0].id], var.additional_security_group_ids)
+    condition = var.create_security_group ? length(local.security_group_ids) >= 2 : length(local.security_group_ids) == 1
+    error_message = "Security group IDs logic is incorrect"
+  }
+
+  What Makes a Good Unit Test:
+
+  1. Tests conditional resource creation (count/for_each logic)
+  2. Tests local variable computations (merges, conditionals, transformations)
+  3. Tests that resource configurations use the right computed values
+  4. Tests edge cases (empty lists, null values, boundary conditions)
+  5. Tests variable validations by giving wrong values in variables and using `expect_failures`
+
+  🚫 NEVER TEST:
+
+  - Variable value == The exact value you just assigned
+  - Static equality checks with no logic
+  - Anything that always evaluates to true/false
+
+  ## Additional Improvement - Add This Section:
+
+  ```markdown
+  ### SELF-REVIEW QUESTIONS (Ask Before Submitting Each Test):
+
+  For each assert statement you write, ask:
+
+  **Question 1**: "Am I testing the Terraform code's logic, or just my test data?"
+  - Should be: Terraform code's logic
+  - If you're testing test data → Delete this test
+
+  **Question 2**: "Does this test verify a transformation, calculation, or decision made by the Terraform code?"
+  - If NO → Delete this test
+
+  ### Example Self-Review:
+
+  ```hcl
+  # TEST CASE:
+  variables { instance_type = "t3.micro" }
+  assert { condition = var.instance_type == "t3.micro" }
+
+  # SELF-REVIEW:
+  # Q1: If I change instance_type to "t3.small", does this validate different behavior?
+  #     → NO, it just fails because I hardcoded "t3.micro"
+  # Q2: Am I testing Terraform logic or test data?
+  #     → Test data only
+  # Q3: Does this verify a transformation/calculation?
+  #     → NO
+  # VERDICT: ❌ DELETE THIS TEST
 ```
 
 ### Error Message Correlation Examples
