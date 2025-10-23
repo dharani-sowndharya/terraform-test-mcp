@@ -969,13 +969,817 @@ run "test_gcp_module_override" {
 
 **Key Rule:** `override_resource` and `override_data` do NOT eliminate the need for `mock_provider`. They work together - the mock provider prevents real AWS calls, while overrides provide specific test values.
 
+### Azure-Specific Mock Testing - UUID Validation Requirements
+
+**CRITICAL for Azure (azurerm/azuread providers):**
+
+Azure providers strictly validate UUID format for identity-related fields. Mock data MUST use properly formatted UUIDs or tests will fail with validation errors.
+
+**Required UUID Format:** `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx` (8-4-4-4-12 hex digits)
+
+**Fields that require valid UUIDs:**
+- `object_id` - User/group/service principal object IDs
+- `tenant_id` - Azure AD tenant identifiers
+- `subscription_id` - Azure subscription identifiers
+- `client_id` - Application/service principal client IDs
+
+**Common Error Pattern:**
+```
+Error: expected "object_id" to be a valid UUID, got l1p32lu5
+
+  with azurerm_postgresql_flexible_server_active_directory_administrator.entra_admin_groups["TestGroup"],
+  on main.tf line 70, in resource "azurerm_postgresql_flexible_server_active_directory_administrator" "entra_admin_groups":
+  70:   object_id = each.value.object_id
+```
+
+This error indicates:
+1. A data source lookup is returning unmocked or auto-generated data
+2. The auto-generated value doesn't match UUID format
+3. You need to add `override_data` with a valid UUID
+
+**Complete Mock Data Dependency Chain:**
+
+When testing Azure resources with Entra ID integration, trace the full dependency chain:
+
+```hcl
+# Variable triggers data source lookup
+variables {
+  entra_id_admin_group_display_names = ["TestGroup"]  # ← Input triggers lookup
+}
+
+# Module has data source using for_each
+data "azuread_group" "admin_groups" {
+  for_each     = toset(var.entra_id_admin_group_display_names)
+  display_name = each.value
+}
+
+# Resource uses data source output
+resource "azurerm_postgresql_flexible_server_active_directory_administrator" "entra_admin_groups" {
+  for_each   = data.azuread_group.admin_groups
+  object_id  = each.value.object_id  # ← Requires valid UUID!
+}
+```
+
+**WRONG - Missing mock causes UUID validation error:**
+```hcl
+mock_provider "azurerm" {
+  alias = "mock"
+}
+
+mock_provider "azuread" {
+  alias = "mock_ad"
+}
+
+run "test_with_entra_groups" {
+  command = plan
+
+  providers = {
+    azurerm = azurerm.mock
+    azuread = azuread.mock_ad
+  }
+
+  variables {
+    enable_entra_id_auth = true
+    entra_id_admin_group_display_names = ["TestGroup"]  # ← Triggers data source
+    # Missing: override_data for the group!
+  }
+
+  # This will FAIL - Terraform generates random value for unmocked data source
+  # Random value like "l1p32lu5" fails UUID validation
+}
+```
+
+**CORRECT - Complete mock data with valid UUID:**
+```hcl
+mock_provider "azurerm" {
+  alias = "mock"
+}
+
+mock_provider "azuread" {
+  alias = "mock_ad"
+}
+
+run "test_with_entra_groups" {
+  command = plan
+
+  providers = {
+    azurerm = azurerm.mock
+    azuread = azuread.mock_ad
+  }
+
+  override_data {
+    target = data.azuread_group.admin_groups["TestGroup"]  # ← Must match exact key
+    values = {
+      display_name     = "TestGroup"
+      object_id        = "12345678-1234-5678-1234-567812345678"  # ← Valid UUID!
+      security_enabled = true
+    }
+  }
+
+  variables {
+    enable_entra_id_auth = true
+    entra_id_admin_group_display_names = ["TestGroup"]
+  }
+
+  assert {
+    condition     = length(azurerm_postgresql_flexible_server_active_directory_administrator.entra_admin_groups) == 1
+    error_message = "Should create one admin group configuration"
+  }
+}
+```
+
+**WRONG - Invalid UUID formats (will fail validation):**
+```hcl
+override_data {
+  target = data.azuread_group.admin_groups["TestGroup"]
+  values = {
+    object_id = "group-obj-id-12345"  # ❌ Not a valid UUID
+  }
+}
+
+override_data {
+  target = data.azuread_user.admin_users["user@example.com"]
+  values = {
+    object_id = "user-obj-id-67890"  # ❌ Not a valid UUID
+  }
+}
+
+override_data {
+  target = data.azurerm_client_config.current
+  values = {
+    tenant_id = "custom-tenant-id-88888"  # ❌ Not a valid UUID
+  }
+}
+```
+
+**CORRECT - Valid UUID formats:**
+```hcl
+override_data {
+  target = data.azuread_group.admin_groups["TestGroup"]
+  values = {
+    display_name     = "TestGroup"
+    object_id        = "11111111-1111-1111-1111-111111111111"  # ✅ Valid UUID
+    security_enabled = true
+  }
+}
+
+override_data {
+  target = data.azuread_user.admin_users["user@example.com"]
+  values = {
+    user_principal_name = "user@example.com"
+    display_name        = "Test User"
+    object_id           = "22222222-2222-2222-2222-222222222222"  # ✅ Valid UUID
+  }
+}
+
+override_data {
+  target = data.azurerm_client_config.current
+  values = {
+    tenant_id       = "87654321-4321-4321-4321-210987654321"  # ✅ Valid UUID
+    subscription_id = "12345678-1234-1234-1234-123456789012"  # ✅ Valid UUID
+    object_id       = "abcdefab-abcd-abcd-abcd-abcdefabcdef"  # ✅ Valid UUID
+    client_id       = "11111111-2222-3333-4444-555555555555"  # ✅ Valid UUID
+  }
+}
+```
+
+**for_each Data Source Mocking - Azure Specific:**
+
+When data sources use `for_each`, you must mock EACH instance using the exact key from the set:
+
+```hcl
+# Module data source
+data "azuread_group" "admin_groups" {
+  for_each     = toset(var.entra_id_admin_group_display_names)
+  display_name = each.value
+}
+
+# Test with multiple groups
+run "test_multiple_groups" {
+  providers = {
+    azurerm = azurerm.mock
+    azuread = azuread.mock_ad
+  }
+
+  # Must mock EACH group individually
+  override_data {
+    target = data.azuread_group.admin_groups["Azure_PostgreSQL_Admin"]  # ← Exact key
+    values = {
+      display_name     = "Azure_PostgreSQL_Admin"
+      object_id        = "44444444-4444-4444-4444-444444444444"
+      security_enabled = true
+    }
+  }
+
+  override_data {
+    target = data.azuread_group.admin_groups["Azure_PostgreSQL_DevOps"]  # ← Exact key
+    values = {
+      display_name     = "Azure_PostgreSQL_DevOps"
+      object_id        = "55555555-5555-5555-5555-555555555555"
+      security_enabled = true
+    }
+  }
+
+  variables {
+    enable_entra_id_auth = true
+    entra_id_admin_group_display_names = [
+      "Azure_PostgreSQL_Admin",
+      "Azure_PostgreSQL_DevOps"
+    ]
+  }
+}
+```
+
+**Azure Mock Data Structure Consistency:**
+
+Always include ALL required fields for Azure AD resources, not just the ones referenced in your resource blocks:
+
+```hcl
+# Incomplete - will cause issues
+override_data {
+  target = data.azuread_group.admin_groups["TestGroup"]
+  values = {
+    display_name = "TestGroup"
+    object_id    = "11111111-1111-1111-1111-111111111111"
+    # Missing: security_enabled
+  }
+}
+
+# Complete - includes all required fields
+override_data {
+  target = data.azuread_group.admin_groups["TestGroup"]
+  values = {
+    display_name     = "TestGroup"
+    object_id        = "11111111-1111-1111-1111-111111111111"
+    security_enabled = true  # ✅ Always include
+  }
+}
+```
+
+**Debugging UUID Validation Errors - Step-by-Step:**
+
+1. **Identify the failing resource** from error message
+2. **Find which attribute** requires the UUID (usually `object_id`, `tenant_id`, etc.)
+3. **Trace back the data flow:**
+   - What data source provides this value?
+   - What variable triggers the data source lookup?
+4. **Check for missing `override_data`:**
+   - Is there an `override_data` block for this data source instance?
+   - Does the target key exactly match the variable value?
+5. **Validate UUID format:**
+   - Does the mock `object_id` follow `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`?
+   - Are all characters valid hex digits (0-9, a-f)?
+
+**Azure Mock Testing Checklist:**
+
+Before generating Azure mock tests, ensure:
+- [ ] All `object_id` fields use valid UUID format (8-4-4-4-12 hex digits)
+- [ ] All `tenant_id` fields use valid UUID format
+- [ ] All `subscription_id` fields use valid UUID format
+- [ ] All `client_id` fields use valid UUID format
+- [ ] Each `override_data` target matches the exact data source instance key
+- [ ] All Azure AD resources include `security_enabled` field in mock data
+- [ ] All user mocks include `user_principal_name` and `display_name`
+- [ ] All group mocks include `display_name` and `security_enabled`
+- [ ] Variables that trigger data lookups have corresponding `override_data` blocks
+- [ ] for_each data sources have separate `override_data` for each instance
+
 ## STEP 5: List of Valid Test Cases
 
 ### Variable Validation Tests
-- Test that required variables reject invalid inputs using expect_failures
-- Validate variable type constraints work correctly
-- Test default values are applied when variables aren't specified
-- Verify complex variable validation rules (regex patterns, ranges, allowed values)
+
+**CRITICAL REQUIREMENT**: `expect_failures` works with:
+1. Variable validation blocks
+2. Resource/data/output/check preconditions
+3. Resource/data/output/check postconditions
+
+`expect_failures` does NOT work with provider-side resource validations.
+
+**IMPORTANT**: Only generate validation tests when the module already has validation blocks or lifecycle preconditions/postconditions. Do NOT modify the module code.
+
+**Common Failure Pattern:**
+```hcl
+# Test file with expect_failures
+run "test_empty_server_name_fails" {
+  command = plan
+
+  variables {
+    name = ""
+  }
+
+  expect_failures = [
+    var.name  # ← This will FAIL if there's no validation block on var.name
+  ]
+}
+```
+
+**Error Message Pattern:**
+```
+Error: length should equal to or greater than 3, got ""
+  with azurerm_postgresql_flexible_server.psql_server
+
+Error: Missing expected failure
+  The checkable object, var.name, was expected to report an error but did not.
+```
+
+This error indicates the validation happened at the **provider resource level**, not at the **variable validation level** or **precondition level**. The `expect_failures` directive only catches Terraform-level validation errors.
+
+---
+
+## Detection Workflow for Validation Tests
+
+### 1. Scan for Variable Validations
+**Look for:** Variables with `validation { }` blocks
+
+**Example Variable WITH Validation Block (Generate Test):**
+```hcl
+variable "name" {
+  description = "Server name"
+  type        = string
+
+  validation {
+    condition     = length(var.name) >= 3
+    error_message = "Server name must be at least 3 characters long."
+  }
+}
+```
+
+**Generate test:**
+```hcl
+run "test_empty_server_name_fails" {
+  command = plan
+
+  variables {
+    name = ""  # Invalid: empty string fails length >= 3
+    # ... all other required variables
+  }
+
+  expect_failures = [
+    var.name
+  ]
+}
+```
+
+### 2. Scan for Resource/Data Preconditions
+**Look for:** `lifecycle { precondition { } }` blocks in resources, data sources, or outputs
+
+**Example Resource WITH Precondition (Generate Test):**
+```hcl
+resource "azurerm_storage_account" "main" {
+  name                = var.storage_account_name
+  resource_group_name = var.resource_group_name
+  location            = var.location
+
+  lifecycle {
+    precondition {
+      condition     = var.enable_encryption == true
+      error_message = "Encryption must be enabled for storage accounts."
+    }
+
+    precondition {
+      condition     = length(var.allowed_ips) > 0
+      error_message = "At least one allowed IP address must be specified."
+    }
+  }
+}
+```
+
+**Generate tests:**
+```hcl
+run "test_encryption_disabled_fails" {
+  command = plan
+
+  providers = {
+    azurerm = azurerm.mock
+  }
+
+  variables {
+    storage_account_name = "teststorage"
+    resource_group_name  = "test-rg"
+    location             = "eastus"
+    enable_encryption    = false  # Violates precondition
+    allowed_ips          = ["10.0.0.1"]
+  }
+
+  expect_failures = [
+    azurerm_storage_account.main
+  ]
+}
+
+run "test_empty_allowed_ips_fails" {
+  command = plan
+
+  providers = {
+    azurerm = azurerm.mock
+  }
+
+  variables {
+    storage_account_name = "teststorage"
+    resource_group_name  = "test-rg"
+    location             = "eastus"
+    enable_encryption    = true
+    allowed_ips          = []  # Violates precondition
+  }
+
+  expect_failures = [
+    azurerm_storage_account.main
+  ]
+}
+```
+
+### 3. Scan for Output Preconditions
+**Look for:** `precondition { }` blocks in outputs
+
+**Example Output WITH Precondition (Generate Test):**
+```hcl
+output "database_endpoint" {
+  description = "Database connection endpoint"
+  value       = azurerm_postgresql_flexible_server.main.fqdn
+
+  precondition {
+    condition     = var.enable_public_access == false
+    error_message = "Public access must be disabled for security compliance."
+  }
+}
+```
+
+**Generate test:**
+```hcl
+run "test_public_access_enabled_fails" {
+  command = plan
+
+  providers = {
+    azurerm = azurerm.mock
+  }
+
+  variables {
+    name                    = "test-server"
+    resource_group_name     = "test-rg"
+    enable_public_access    = true  # Violates output precondition
+    # ... other required variables
+  }
+
+  expect_failures = [
+    output.database_endpoint
+  ]
+}
+```
+
+### 4. Scan for Check Blocks with Assertions
+**Look for:** `check { }` blocks with assertions
+
+**Example Check Block (Generate Test):**
+```hcl
+check "security_compliance" {
+  assert {
+    condition     = var.encryption_enabled == true
+    error_message = "Encryption must be enabled for compliance."
+  }
+
+  assert {
+    condition     = var.backup_retention_days >= 7
+    error_message = "Backup retention must be at least 7 days."
+  }
+}
+```
+
+**Generate tests:**
+```hcl
+run "test_encryption_compliance_fails" {
+  command = plan
+
+  variables {
+    encryption_enabled     = false  # Violates check assertion
+    backup_retention_days = 7
+    # ... other required variables
+  }
+
+  expect_failures = [
+    check.security_compliance
+  ]
+}
+
+run "test_backup_retention_compliance_fails" {
+  command = plan
+
+  variables {
+    encryption_enabled     = true
+    backup_retention_days = 5  # Violates check assertion
+    # ... other required variables
+  }
+
+  expect_failures = [
+    check.security_compliance
+  ]
+}
+```
+
+### 5. Scan for Postconditions
+**Look for:** `lifecycle { postcondition { } }` blocks in resources, data sources, or outputs
+
+**Note:** Postconditions require `command = apply` because they validate after resource creation.
+
+**Example Resource WITH Postcondition (Generate Test):**
+```hcl
+resource "aws_s3_bucket" "main" {
+  bucket = var.bucket_name
+
+  lifecycle {
+    postcondition {
+      condition     = self.versioning[0].enabled == true
+      error_message = "S3 bucket versioning must be enabled."
+    }
+  }
+}
+```
+
+**Generate test:**
+```hcl
+run "test_versioning_not_enabled_fails" {
+  command = apply  # Postconditions require apply
+
+  providers = {
+    aws = aws.mock
+  }
+
+  variables {
+    bucket_name = "test-bucket"
+    enable_versioning = false  # This will cause postcondition to fail
+    # ... other required variables
+  }
+
+  expect_failures = [
+    aws_s3_bucket.main
+  ]
+}
+```
+
+---
+
+## Test Generation Strategy
+
+### Scan Phase
+1. Parse all `.tf` files in the module
+2. Extract all variable declarations and check for `validation { }` blocks
+3. Scan all resources/data sources for `lifecycle { precondition { } }` and `lifecycle { postcondition { } }` blocks
+4. Scan all outputs for `precondition { }` blocks
+5. Scan for standalone `check { }` blocks
+
+### Analysis Phase
+For each validation/precondition/postcondition found:
+- Parse the condition expression
+- Determine what invalid inputs would trigger the validation error
+- Extract the error message
+- Identify whether it needs `command = plan` or `command = apply`
+
+### Test Generation Phase
+- Generate `expect_failures` tests for each identified validation/precondition
+- Use `command = plan` for variable validations, preconditions, and check blocks
+- Use `command = apply` for postconditions
+- Create descriptive test names: `test_<validation_type>_<reason>_fails`
+
+---
+
+## Common Validation Patterns to Test
+
+### Variable Validation Patterns
+
+**String Length:**
+```hcl
+validation {
+  condition     = length(var.name) >= 3
+  error_message = "Name must be at least 3 characters long."
+}
+# Test: name = "" or name = "ab"
+```
+
+**Enumerated Values:**
+```hcl
+validation {
+  condition     = contains(["11", "12", "13", "14"], var.version)
+  error_message = "Version must be one of: 11, 12, 13, 14."
+}
+# Test: version = "999"
+```
+
+**Pattern Matching:**
+```hcl
+validation {
+  condition     = can(regex("^[a-z0-9-]+$", var.name))
+  error_message = "Name must contain only lowercase letters, numbers, and hyphens."
+}
+# Test: name = "INVALID_NAME"
+```
+
+**Cross-Variable:**
+```hcl
+validation {
+  condition     = var.workspace_id != null || var.enable_diagnostics == false
+  error_message = "Workspace ID required when diagnostics enabled."
+}
+# Test: enable_diagnostics = true, workspace_id = null
+```
+
+### Resource Precondition Patterns
+
+**Conditional Requirements:**
+```hcl
+lifecycle {
+  precondition {
+    condition     = var.create_backup ? var.backup_retention_days >= 7 : true
+    error_message = "When backups are enabled, retention must be at least 7 days."
+  }
+}
+# Test: create_backup = true, backup_retention_days = 3
+```
+
+**Data Source Validation:**
+```hcl
+data "azurerm_resource_group" "main" {
+  name = var.resource_group_name
+
+  lifecycle {
+    precondition {
+      condition     = length(var.resource_group_name) > 0
+      error_message = "Resource group name cannot be empty."
+    }
+  }
+}
+# Test: resource_group_name = ""
+```
+
+**Security Requirements:**
+```hcl
+lifecycle {
+  precondition {
+    condition     = var.public_access_enabled == false
+    error_message = "Public access must be disabled for security compliance."
+  }
+}
+# Test: public_access_enabled = true
+```
+
+### Output Precondition Patterns
+
+**Output Value Validation:**
+```hcl
+output "connection_string" {
+  value = "${azurerm_postgresql_server.main.fqdn}:5432"
+
+  precondition {
+    condition     = var.ssl_enforcement == true
+    error_message = "SSL must be enforced for database connections."
+  }
+}
+# Test: ssl_enforcement = false
+```
+
+### Check Block Patterns
+
+**Compliance Checks:**
+```hcl
+check "encryption_compliance" {
+  assert {
+    condition     = var.enable_encryption && var.encryption_key_id != null
+    error_message = "Encryption must be enabled with a valid key ID."
+  }
+}
+# Test: enable_encryption = true, encryption_key_id = null
+```
+
+---
+
+## Test File Structure
+
+```hcl
+# File: tests/validation_variable_constraints.tftest.hcl
+
+mock_provider "azurerm" {
+  alias = "mock"
+}
+
+# Variable validation test
+run "test_name_too_short_fails" {
+  command = plan
+
+  providers = {
+    azurerm = azurerm.mock
+  }
+
+  variables {
+    name                = "ab"  # Fails validation
+    resource_group_name = "rg-test"
+    # ... all other required variables with valid values
+  }
+
+  expect_failures = [
+    var.name
+  ]
+}
+
+# Resource precondition test
+run "test_encryption_disabled_fails" {
+  command = plan
+
+  providers = {
+    azurerm = azurerm.mock
+  }
+
+  variables {
+    name                = "valid-name"
+    resource_group_name = "rg-test"
+    enable_encryption   = false  # Fails precondition
+    # ... other required variables
+  }
+
+  expect_failures = [
+    azurerm_storage_account.main
+  ]
+}
+
+# Output precondition test
+run "test_ssl_not_enforced_fails" {
+  command = plan
+
+  providers = {
+    azurerm = azurerm.mock
+  }
+
+  variables {
+    name                = "valid-name"
+    resource_group_name = "rg-test"
+    ssl_enforcement     = false  # Fails output precondition
+    # ... other required variables
+  }
+
+  expect_failures = [
+    output.connection_string
+  ]
+}
+
+# Check block test
+run "test_compliance_check_fails" {
+  command = plan
+
+  providers = {
+    azurerm = azurerm.mock
+  }
+
+  variables {
+    name                = "valid-name"
+    encryption_enabled  = false  # Fails check assertion
+    # ... other required variables
+  }
+
+  expect_failures = [
+    check.security_compliance
+  ]
+}
+
+# Postcondition test (requires apply)
+run "test_versioning_postcondition_fails" {
+  command = apply
+
+  providers = {
+    aws = aws.mock
+  }
+
+  variables {
+    bucket_name       = "test-bucket"
+    enable_versioning = false  # Will fail postcondition
+    # ... other required variables
+  }
+
+  expect_failures = [
+    aws_s3_bucket.main
+  ]
+}
+```
+
+---
+
+## Important Notes
+
+**DO Generate Tests When:**
+- ✅ Variables have `validation { }` blocks
+- ✅ Resources/data sources have `lifecycle { precondition { } }` blocks
+- ✅ Outputs have `precondition { }` blocks
+- ✅ Check blocks with assertions exist
+- ✅ Resources/data/outputs have `lifecycle { postcondition { } }` blocks
+
+**DO NOT Generate Tests When:**
+- ❌ Variables have no validation blocks
+- ❌ Resources rely only on provider-side validation
+- ❌ No preconditions/postconditions/checks exist
+
+**Best Practices:**
+- ✅ Always provide ALL required variables in each test
+- ✅ Use valid values for non-tested variables to isolate the validation
+- ✅ Include provider mocking even for validation tests
+- ✅ Use `command = plan` for validations, preconditions, and checks
+- ✅ Use `command = apply` for postconditions
+- ✅ Test each validation/precondition/postcondition separately
+- ❌ Do NOT modify the module code to add validation blocks or preconditions
 
 ### Output Validation Tests
 - Verify outputs return expected values and formats
