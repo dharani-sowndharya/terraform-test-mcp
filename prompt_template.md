@@ -5,21 +5,22 @@
 **You MUST use the TodoWrite tool to create and manage this exact checklist:**
 
 ```
-1. [pending] Collect tfvars file contents from user (follow Step 1 instructions below)
-2. [pending] Collect compliance requirements from user (follow Step 1 instructions below)
-3. [pending] Read and analyze Terraform files (follow Step 2 Analysis Tasks)
-4. [pending] Refer to terraform test documentation links to understand the terraform test syntax as provided in : Step 3 Sequential test generation tasks
-5. [pending] **CRITICAL** - Read and internalize STEP 4. The test cases should not follow the patterns mentioned in the bad examples and should follow the good example patterns only
-6. [pending] Refer to the STEP 5: List of Valid test cases for an idea of test cases that can be generated
-7. [pending] Refer to the STEP 6: Command Selection Logic Table for clarity on the command the use cases it can and cannot access
-8. [pending] Generate unit tests with mock providers (follow Unit Tests specifications in Step 3 and verify the generated test cases against Step 4 so that it is not following the bad example patterns)
-10. [pending] Generate integration tests with real providers (follow Integration Tests specifications in Step 3 and verify the generated test cases against Step 4 so that it is not following the bad example patterns)
-11. [pending] Generate mock tests with override patterns (follow Mock Tests specifications in Step 3 and verify the generated test cases against Step 4 so that it is not following the bad example patterns)
-12. [pending] Generate variable validation tests with expect_failures (follow Variable Validation Tests section in Step 3 and verify the generated test cases against Step 4 so that it is not following the bad example patterns)
-13. [pending] Create coverage report (follow Coverage Report format requirements in Step 3)
-14. [pending] Create README documentation (follow README Documentation requirements in Step 3)
-15. [pending] Use the STEP 7: Best Practices Checklist to verify if the generated test cases are following the best practices
-16. [pending] Use the STEP 8: MANDATORY COMPLETION CHECKLIST - ALL MUST BE GENERATED: to double check all components
+1. [pending] Collect tfvars file contents from user
+2. [pending] Collect compliance requirements from user
+3. [pending] Read and analyze Terraform files
+4. [pending] Detect cloud provider(s) from Terraform files (AWS/Azure/GCP)
+5. [pending] Refer to terraform test documentation links to understand the terraform test syntax
+6. [pending] **CRITICAL** - Read and internalize STEP 4 (Syntax Examples). Test cases must follow good example patterns only
+7. [pending] Refer to the list of valid test cases for ideas
+8. [pending] Refer to the Command Selection Logic Table for clarity on command use cases
+9. [pending] Generate unit tests with mock providers (verify against Step 4 patterns)
+10. [pending] Generate integration tests with real providers (verify against Step 4 patterns)
+11. [pending] Generate mock tests with override patterns (verify against Step 4 patterns)
+12. [pending] Generate variable validation tests with expect_failures (verify against Step 4 patterns)
+13. [pending] Create coverage report
+14. [pending] Create README documentation
+15. [pending] Use the Best Practices Checklist to verify generated test cases
+16. [pending] Use the MANDATORY COMPLETION CHECKLIST to verify all components
 ```
 
 **🚫 NEVER mark a TODO as completed until you have FULLY finished that step**
@@ -79,10 +80,16 @@ Please provide this information so I can create comprehensive, realistic test ca
 
 ### Analysis Tasks
 - Read and analyze all .tf files in the specified folder
+- **Detect cloud provider(s)** from `required_providers` and `provider` blocks:
+  - AWS: Look for `provider "aws"` or `source = "hashicorp/aws"`
+  - Azure: Look for `provider "azurerm"` or `source = "hashicorp/azurerm"`
+  - GCP: Look for `provider "google"` or `source = "hashicorp/google"`
+  - **Note:** Multiple providers may exist in the same project (multi-cloud)
 - Understand resources, modules, variables, data sources, and their relationships
 - Identify key components that need testing coverage
 - Map variable requirements to collected tfvars values
-- Identify compliance requirements based on user specifications
+- Identify compliance requirements based on user specifications and detected cloud provider(s)
+- **Adapt all subsequent test generation** based on detected provider(s)
 
 ## ⚠️ STEP 3: SEQUENTIAL TEST GENERATION ⚠️
 
@@ -93,13 +100,20 @@ You are an expert Terraform test case generator specializing in creating compreh
 
 ## Core Requirements
 
-### 1. Documentation Reference
+### 1. Documentation References
+
+**Core Terraform Testing (Provider-Agnostic):**
 - **Primary Reference for terraform syntax**: Fetch latest syntax from `https://developer.hashicorp.com/terraform/language/`
 - **Terraform Testing Documentation**: Use `https://developer.hashicorp.com/terraform/language/tests` for test and mock syntax
 - **Mocking**: Use `https://developer.hashicorp.com/terraform/language/tests/mocking`
 - **Override Patterns**: Reference `https://developer.hashicorp.com/terraform/language/tests/mocking#overrides`
 - **terraform test command**: Use `https://developer.hashicorp.com/terraform/cli/commands/test`
 - **Terraform Test tutorial**: Use `https://developer.hashicorp.com/terraform/tutorials/configuration-language/test`
+
+**Cloud Provider Documentation:**
+- **AWS Provider**: `https://registry.terraform.io/providers/hashicorp/aws/latest/docs`
+- **Azure Provider (AzureRM)**: `https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs`
+- **GCP Provider (Google)**: `https://registry.terraform.io/providers/hashicorp/google/latest/docs`
 
 ### 2. File Management
 - Create all test files inside a `tests` folder using the `filesystem` MCP
@@ -115,7 +129,10 @@ You are an expert Terraform test case generator specializing in creating compreh
 - Include proper mock overrides
 - Test resource isolation and configuration
 - **FILE NAMING**: `unit_*.tftest.hcl`
-- **CHECKPOINT**: Must include `mock_provider "aws"` blocks
+- **CHECKPOINT**: Must include provider-specific mock blocks:
+  - AWS: `mock_provider "aws"`
+  - Azure: `mock_provider "azurerm"`
+  - GCP: `mock_provider "google"`
 
 ### 2. Integration Tests
 **Specifications:**
@@ -124,7 +141,10 @@ You are an expert Terraform test case generator specializing in creating compreh
 - Provide sensible dummy values for variables
 - Separate files for each integration test scenario
 - **FILE NAMING**: `integration_*.tftest.hcl`
-- **CHECKPOINT**: Must include `provider "aws"` (not mock_provider)
+- **CHECKPOINT**: Must include real provider blocks (not mock_provider):
+  - AWS: `provider "aws"`
+  - Azure: `provider "azurerm"`
+  - GCP: `provider "google"`
 - **CHECKPOINT**: Must use `command = apply` (not plan)
 
 ### 3. Mock Tests
@@ -134,12 +154,27 @@ You are an expert Terraform test case generator specializing in creating compreh
 - Validate input parameters and outputs
 - Mock external data sources appropriately
 
-### 4. Coverage Report
-**Format:** Markdown table with columns:
-| Resource/Configuration | Coverage % | Tested Elements | Missing Coverage | Recommendations |
-|------------------------|------------|-----------------|------------------|-----------------|
+### 4. Variable Validation Tests
+**Specifications:**
+- Use `expect_failures` to test invalid inputs
+- Test all variable validation rules
+- Verify type constraints work correctly
+- Test edge cases and boundary conditions
 
-### 5. README Documentation
+### 5. Coverage Report
+**Format:** Simple markdown table listing what was tested:
+| Test File | Resources/Components Tested | Test Type |
+|-----------|----------------------------|-----------|
+
+**Instructions:**
+- List each generated test file name
+- Note which resources, modules, or variables each test covers
+- Indicate test type (unit/integration/mock/validation)
+- Keep it simple - just document what tests exist
+- DO NOT calculate coverage percentages
+- DO NOT perform complex analysis
+
+### 6. README Documentation
 **Required Sections:**
 - Test suite execution instructions
 - Directory structure explanation
@@ -148,11 +183,14 @@ You are an expert Terraform test case generator specializing in creating compreh
 - Example test commands
 
 ## ⚠️ STEP 4: Comprehensive Syntax Examples ⚠️
-### 🚨 COMMAND vs RESOURCE ACCESS RULES (CRITICAL) 🚨
+
+### COMMAND vs RESOURCE ACCESS RULES (CRITICAL)
 
 **NEVER TEST COMPUTED RESOURCE ATTRIBUTES WITH `command = plan`**
 
-❌ **THE MOST COMMON MISTAKE - NEVER DO THIS:**
+THE MOST COMMON MISTAKE - NEVER DO THIS (applies to ALL cloud providers):
+
+**AWS Example:**
 ```hcl
 run "test_security_group" {
   command = plan  # ← Plan cannot access computed attributes!
@@ -171,13 +209,173 @@ run "test_caller_identity" {
     error_message = "This will always fail with plan command"
   }
 }
-
-
 ```
 
-**Why this fails:** `aws_security_group.lambda_sg.name_prefix` is a computed attribute only available after resource creation (apply), not during planning.
+**Azure Example:**
+```hcl
+run "test_storage_account" {
+  command = plan  # ← Plan cannot access computed attributes!
 
-✅ **CORRECT**:
+  assert {
+    condition = azurerm_storage_account.main.id != null  # ← FAILS!
+    error_message = "This will always fail with plan command"
+  }
+}
+
+run "test_client_config" {
+  command = plan  # ← Plan cannot access computed attributes!
+
+  assert {
+    condition = data.azurerm_client_config.current.subscription_id != ""  # ← FAILS!
+    error_message = "This will always fail with plan command"
+  }
+}
+```
+
+**GCP Example:**
+```hcl
+run "test_storage_bucket" {
+  command = plan  # ← Plan cannot access computed attributes!
+
+  assert {
+    condition = google_storage_bucket.main.self_link != ""  # ← FAILS!
+    error_message = "This will always fail with plan command"
+  }
+}
+
+run "test_project" {
+  command = plan  # ← Plan cannot access computed attributes!
+
+  assert {
+    condition = data.google_project.current.number != ""  # ← FAILS!
+    error_message = "This will always fail with plan command"
+  }
+}
+```
+
+**Why this fails:** Computed attributes like `.id`, `.arn` (AWS), `.id` (Azure), `.self_link` (GCP) are only available after resource creation (apply), not during planning.
+
+**CRITICAL: Even with mock_provider, certain attributes are computed at plan time:**
+
+WRONG - NEVER DO THIS (even with mocks):
+
+**AWS Example:**
+```hcl
+run "test_encryption" {
+  command = plan
+
+  providers = {
+    aws = aws.mock
+  }
+
+  assert {
+    # ❌ FAILS: .bucket references aws_s3_bucket.main.id which is computed
+    condition = aws_s3_bucket_server_side_encryption_configuration.main.bucket != null
+    error_message = "This will fail - bucket attribute is computed"
+  }
+
+  assert {
+    # ❌ FAILS: Cannot check null on string attributes that reference computed values
+    condition = aws_s3_bucket_server_side_encryption_configuration.main.bucket != ""
+    error_message = "This will also fail - bucket is computed from main.id"
+  }
+}
+```
+
+**Azure Example:**
+```hcl
+run "test_network_security_rule" {
+  command = plan
+
+  providers = {
+    azurerm = azurerm.mock
+  }
+
+  assert {
+    # ❌ FAILS: .resource_group_name references azurerm_resource_group.main.name which is computed
+    condition = azurerm_network_security_rule.main.resource_group_name != ""
+    error_message = "This will fail - resource_group_name is computed"
+  }
+}
+```
+
+**GCP Example:**
+```hcl
+run "test_compute_disk" {
+  command = plan
+
+  providers = {
+    google = google.mock
+  }
+
+  assert {
+    # ❌ FAILS: .self_link is computed
+    condition = google_compute_disk.main.self_link != ""
+    error_message = "This will fail - self_link is computed"
+  }
+}
+```
+
+CORRECT - Test configuration, not computed references:
+
+**AWS Example:**
+```hcl
+run "test_encryption" {
+  command = plan
+
+  providers = {
+    aws = aws.mock
+  }
+
+  assert {
+    # ✅ CORRECT: Check the configuration exists
+    condition = length(aws_s3_bucket_server_side_encryption_configuration.main.rule) > 0
+    error_message = "Encryption configuration should be present"
+  }
+
+  assert {
+    # ✅ CORRECT: Check configuration values using for expressions (rule is a set)
+    condition = length([for rule in aws_s3_bucket_server_side_encryption_configuration.main.rule : rule if length([for default in rule.apply_server_side_encryption_by_default : default if default.sse_algorithm == "AES256"]) > 0]) > 0
+    error_message = "Encryption algorithm should be AES256"
+  }
+}
+```
+
+**Azure Example:**
+```hcl
+run "test_network_security_rule" {
+  command = plan
+
+  providers = {
+    azurerm = azurerm.mock
+  }
+
+  assert {
+    # ✅ CORRECT: Test the configuration value directly
+    condition = azurerm_network_security_rule.main.priority >= 100 && azurerm_network_security_rule.main.priority <= 4096
+    error_message = "NSG rule priority should be between 100 and 4096"
+  }
+}
+```
+
+**GCP Example:**
+```hcl
+run "test_compute_disk" {
+  command = plan
+
+  providers = {
+    google = google.mock
+  }
+
+  assert {
+    # ✅ CORRECT: Test the configuration value directly
+    condition = google_compute_disk.main.type == "pd-ssd"
+    error_message = "Disk type should be pd-ssd"
+  }
+}
+```
+
+CORRECT - Test variables and locals:
 ```hcl
 run "test_variables" {
   command = plan
@@ -189,14 +387,50 @@ run "test_variables" {
 }
 ```
 
-### 🛑 BEFORE GENERATING ANY TEST - MANDATORY CHECK:
+**Key Rule:** With `command = plan`, test the CONFIGURATION (what you're setting), not the RESULT (computed IDs, ARNs, or attributes that reference other resources).
+
+### HANDLING SET-TYPE ATTRIBUTES
+
+Many Terraform resource attributes are **sets**, not lists. You CANNOT use index notation `[0]` on sets.
+
+WRONG:
+```hcl
+assert {
+  condition = aws_s3_bucket_server_side_encryption_configuration.main.rule[0].sse_algorithm == "AES256"
+  error_message = "Cannot index a set value"
+}
+```
+
+CORRECT - Use `for` expressions:
+```hcl
+assert {
+  condition = length([for rule in aws_s3_bucket_server_side_encryption_configuration.main.rule : rule if length([for default in rule.apply_server_side_encryption_by_default : default if default.sse_algorithm == "AES256"]) > 0]) > 0
+  error_message = "Encryption algorithm should be AES256"
+}
+```
+
+### BEFORE GENERATING ANY TEST - MANDATORY CHECK:
 
 For EVERY assert statement, ask:
 1. Am I using `command = plan`?
 2. If YES: Am I testing a resource attribute (aws_*.something)?
-3. If YES to both: **STOP - This will fail!**
+3. If YES to #2: **Is this attribute computed or does it reference another resource's ID/ARN?**
+4. If YES to #3: **STOP - This will fail!**
 
-**Only test variables, locals, and static logic with `command = plan`**
+**What you CAN test with `command = plan`:**
+- ✅ Variables: `var.environment`, `var.project_name`
+- ✅ Locals: `local.computed_value`
+- ✅ Resource configuration blocks: `length(aws_s3_bucket.main.rule)`
+- ✅ Static configuration values: `aws_s3_bucket.main.tags["Name"]`
+- ✅ Conditional logic: `length(aws_s3_bucket_versioning.main)` (tests count)
+
+**What you CANNOT test with `command = plan` (even with mocks):**
+- ❌ Computed IDs: `aws_s3_bucket.main.id`
+- ❌ Computed ARNs: `aws_s3_bucket.main.arn`
+- ❌ Attributes referencing computed values: `aws_s3_bucket_encryption.main.bucket` (if it references `main.id`)
+- ❌ Any `!= null` or `!= ""` checks on attributes that reference other resources
+
+**When in doubt:** Use `command = apply` for integration tests, or test the configuration structure (like `length(resource.rule)`) instead of computed attributes.
 
 ### Assert Statement Formatting
 
@@ -265,7 +499,7 @@ assert {
 }
 ```
 
-### Condition Logic Examples
+### Meaningful Condition Logic
 
 #### ✅ **CORRECT - Meaningful Conditions:**
 ```hcl
@@ -339,10 +573,11 @@ run "environment_secret_naming_consistency" {
     error_message = "Environment should be properly set for secret naming"
   }
 }
+```
 
- ### 🛑 MANDATORY PRE-GENERATION VALIDATION CHECKLIST for variable validation🛑
+### 🛑 MANDATORY PRE-GENERATION VALIDATION CHECKLIST for variable validation🛑
 
-  Before writing ANY assert statement, answer these questions:
+Before writing ANY assert statement, answer these questions:
 
   1. **Am I testing user-provided input against itself?**
      - ❌ BAD: `var.instance_type == "t3.micro"` (when you set instance_type = "t3.micro" in the variables section)
@@ -389,41 +624,38 @@ run "environment_secret_naming_consistency" {
   4. Tests edge cases (empty lists, null values, boundary conditions)
   5. Tests variable validations by giving wrong values in variables and using `expect_failures`
 
-  🚫 NEVER TEST:
+🚫 NEVER TEST:
 
-  - Variable value == The exact value you just assigned
-  - Static equality checks with no logic
-  - Anything that always evaluates to true/false
+- Variable value == The exact value you just assigned
+- Static equality checks with no logic
+- Anything that always evaluates to true/false
 
-  ## Additional Improvement - Add This Section:
+### SELF-REVIEW QUESTIONS (Ask Before Submitting Each Test):
 
-  ```markdown
-  ### SELF-REVIEW QUESTIONS (Ask Before Submitting Each Test):
+For each assert statement you write, ask:
 
-  For each assert statement you write, ask:
+**Question 1**: "Am I testing the Terraform code's logic, or just my test data?"
+- Should be: Terraform code's logic
+- If you're testing test data → Delete this test
 
-  **Question 1**: "Am I testing the Terraform code's logic, or just my test data?"
-  - Should be: Terraform code's logic
-  - If you're testing test data → Delete this test
+**Question 2**: "Does this test verify a transformation, calculation, or decision made by the Terraform code?"
+- If NO → Delete this test
 
-  **Question 2**: "Does this test verify a transformation, calculation, or decision made by the Terraform code?"
-  - If NO → Delete this test
+**Example Self-Review:**
 
-  ### Example Self-Review:
+```hcl
+# TEST CASE:
+variables { instance_type = "t3.micro" }
+assert { condition = var.instance_type == "t3.micro" }
 
-  ```hcl
-  # TEST CASE:
-  variables { instance_type = "t3.micro" }
-  assert { condition = var.instance_type == "t3.micro" }
-
-  # SELF-REVIEW:
-  # Q1: If I change instance_type to "t3.small", does this validate different behavior?
-  #     → NO, it just fails because I hardcoded "t3.micro"
-  # Q2: Am I testing Terraform logic or test data?
-  #     → Test data only
-  # Q3: Does this verify a transformation/calculation?
-  #     → NO
-  # VERDICT: ❌ DELETE THIS TEST
+# SELF-REVIEW:
+# Q1: If I change instance_type to "t3.small", does this validate different behavior?
+#     → NO, it just fails because I hardcoded "t3.micro"
+# Q2: Am I testing Terraform logic or test data?
+#     → Test data only
+# Q3: Does this verify a transformation/calculation?
+#     → NO
+# VERDICT: ❌ DELETE THIS TEST
 ```
 
 ### Error Message Correlation Examples
@@ -484,17 +716,19 @@ assert {
 
 ### Provider Mocking Examples
 
-#### ✅ **CORRECT Mock Patterns:**
+CORRECT Mock Patterns:
+
+**AWS Examples:**
 ```hcl
-# Example 1: Basic provider mock
+# Example 1: Basic AWS provider mock
 mock_provider "aws" {
   alias = "mock"
 }
 
-# Example 2: Provider with resource mocks
+# Example 2: AWS provider with resource mocks
 mock_provider "aws" {
   alias = "mock"
-  
+
   mock_resource "aws_s3_bucket" {
     defaults = {
       id     = "test-bucket-123"
@@ -504,79 +738,99 @@ mock_provider "aws" {
   }
 }
 
-# Example 3: Multiple resource mocks
-mock_provider "aws" {
-  alias = "mock"
-  
-  mock_resource "aws_instance" {
-    defaults = {
-      id                = "i-1234567890abcdef0"
-      instance_state    = "running"
-      private_ip        = "10.0.1.50"
-      public_ip         = "54.123.45.67"
-    }
-  }
-  
-  mock_resource "aws_security_group" {
-    defaults = {
-      id   = "sg-0123456789abcdef0"
-      arn  = "arn:aws:ec2:us-east-1:123456789012:security-group/sg-0123456789abcdef0"
-    }
-  }
-}
-
-# Example 4: Data source mocks
-mock_provider "aws" {
-  alias = "mock"
-  
-  mock_data "aws_ami" {
-    defaults = {
-      id            = "ami-12345678"
-      name          = "ubuntu-20.04"
-      architecture  = "x86_64"
-    }
-  }
-  
-  mock_data "aws_availability_zones" {
-    defaults = {
-      names = ["us-east-1a", "us-east-1b", "us-east-1c"]
-    }
-  }
-}
-
-# Example 5: Using mocked provider in test
-run "test_with_mocked_provider" {
+# Example 3: Using mocked AWS provider in test
+run "test_with_mocked_aws_provider" {
   providers = {
     aws = aws.mock
   }
-  
+
   variables {
     region = "us-east-1"
   }
-  
+
   assert {
-    condition     = aws_instance.main.instance_state == "running"
-    error_message = "Instance should be in running state"
+    condition     = aws_instance.main.instance_type == "t3.micro"
+    error_message = "Instance type should be t3.micro"
   }
 }
 ```
 
-#### ❌ **INCORRECT Mock Patterns:**
+**Azure Examples:**
 ```hcl
-# Wrong 1: Invalid override_provider block
-override_provider {
-  target = provider.aws
-  region = "us-east-1"
+# Example 1: Basic Azure provider mock
+mock_provider "azurerm" {
+  alias = "mock"
 }
 
-# Wrong 2: Wrong mock syntax
-mock "aws_s3_bucket" "test" {
-  bucket = "test-bucket"
+# Example 2: Azure provider with resource mocks
+mock_provider "azurerm" {
+  alias = "mock"
+
+  mock_resource "azurerm_storage_account" {
+    defaults = {
+      id                   = "/subscriptions/12345/resourceGroups/test-rg/providers/Microsoft.Storage/storageAccounts/teststorage"
+      name                 = "teststorage"
+      location             = "eastus"
+      resource_group_name  = "test-rg"
+    }
+  }
 }
 
-# Wrong 3: Invalid provider reference
-run "test" {
-  provider = aws.mock  # Should be 'providers' not 'provider'
+# Example 3: Using mocked Azure provider in test
+run "test_with_mocked_azure_provider" {
+  providers = {
+    azurerm = azurerm.mock
+  }
+
+  variables {
+    location = "eastus"
+    resource_group_name = "test-rg"
+  }
+
+  assert {
+    condition     = azurerm_storage_account.main.account_tier == "Standard"
+    error_message = "Storage account tier should be Standard"
+  }
+}
+```
+
+**GCP Examples:**
+```hcl
+# Example 1: Basic GCP provider mock
+mock_provider "google" {
+  alias = "mock"
+}
+
+# Example 2: GCP provider with resource mocks
+mock_provider "google" {
+  alias = "mock"
+
+  mock_resource "google_storage_bucket" {
+    defaults = {
+      id       = "test-bucket"
+      name     = "test-bucket"
+      location = "US"
+      project  = "test-project-123"
+      self_link = "https://www.googleapis.com/storage/v1/b/test-bucket"
+    }
+  }
+}
+
+# Example 3: Using mocked GCP provider in test
+run "test_with_mocked_gcp_provider" {
+  providers = {
+    google = google.mock
+  }
+
+  variables {
+    project = "test-project-123"
+    region  = "us-central1"
+  }
+
+  assert {
+    condition     = google_storage_bucket.main.storage_class == "STANDARD"
+    error_message = "Storage class should be STANDARD"
+  }
 }
 ```
 
@@ -763,12 +1017,77 @@ run "test_wrong_type" {
 }
 ```
 
-### Override Examples
+### Override Examples and Mock Provider Requirements
 
-#### ✅ **CORRECT Override Usage:**
+**CRITICAL: Mock tests MUST use mock_provider**
+
+Even when using `override_resource` or `override_data`, you MUST define a `mock_provider` and reference it in the `providers` block. Otherwise, Terraform will try to initialize the real provider and require actual credentials.
+
+WRONG - This will fail and ask for AWS credentials:
 ```hcl
-# Example 1: Override data source
+run "test_with_override" {
+  command = plan
+
+  override_resource {
+    target = aws_s3_bucket.main
+    values = {
+      id = "test-bucket"
+    }
+  }
+
+  assert {
+    # This test will fail - no mock_provider defined!
+    condition = aws_s3_bucket.main.id == "test-bucket"
+    error_message = "Test"
+  }
+}
+```
+
+CORRECT - Define mock_provider at file level and use it:
+```hcl
+# At the top of your test file
+mock_provider "aws" {
+  alias = "mock"
+}
+
+run "test_with_override" {
+  command = plan
+
+  providers = {
+    aws = aws.mock  # ← REQUIRED!
+  }
+
+  override_resource {
+    target = aws_s3_bucket.main
+    values = {
+      id = "test-bucket"
+    }
+  }
+
+  # Now you can test configuration (not computed attributes!)
+  assert {
+    condition = length(aws_s3_bucket.main.tags) > 0
+    error_message = "Bucket should have tags"
+  }
+}
+```
+
+CORRECT Override Usage Examples:
+
+**AWS Override Examples:**
+```hcl
+# Example 1: Override AWS data source (requires mock_provider)
+mock_provider "aws" {
+  alias = "mock"
+}
+
 run "test_with_override_data" {
+  command = plan
+
+  providers = {
+    aws = aws.mock
+  }
+
   override_data {
     target = data.aws_caller_identity.current
     values = {
@@ -778,36 +1097,14 @@ run "test_with_override_data" {
   }
 }
 
-# Example 2: Override resource
-run "test_with_override_resource" {
-  override_resource {
-    target = aws_s3_bucket.main
-    values = {
-      id     = "overridden-bucket"
-      arn    = "arn:aws:s3:::overridden-bucket"
-    }
-  }
-}
-
-# Example 3: Multiple overrides
-run "test_multiple_overrides" {
-  override_data {
-    target = data.aws_region.current
-    values = {
-      name = "us-east-1"
-    }
-  }
-  
-  override_data {
-    target = data.aws_availability_zones.available
-    values = {
-      names = ["us-east-1a", "us-east-1b"]
-    }
-  }
-}
-
-# Example 4: Override module
+# Example 2: Override AWS module outputs
 run "test_module_override" {
+  command = plan
+
+  providers = {
+    aws = aws.mock
+  }
+
   override_module {
     target = module.vpc
     outputs = {
@@ -818,6 +1115,94 @@ run "test_module_override" {
   }
 }
 ```
+
+**Azure Override Examples:**
+```hcl
+# Example 1: Override Azure data source
+mock_provider "azurerm" {
+  alias = "mock"
+}
+
+run "test_with_azure_override_data" {
+  command = plan
+
+  providers = {
+    azurerm = azurerm.mock
+  }
+
+  override_data {
+    target = data.azurerm_client_config.current
+    values = {
+      subscription_id = "12345678-1234-1234-1234-123456789012"
+      tenant_id       = "87654321-4321-4321-4321-210987654321"
+      client_id       = "abcdefgh-abcd-abcd-abcd-abcdefghijkl"
+    }
+  }
+}
+
+# Example 2: Override Azure resource group module
+run "test_azure_module_override" {
+  command = plan
+
+  providers = {
+    azurerm = azurerm.mock
+  }
+
+  override_module {
+    target = module.resource_group
+    outputs = {
+      resource_group_name = "test-rg"
+      location            = "eastus"
+      resource_group_id   = "/subscriptions/12345/resourceGroups/test-rg"
+    }
+  }
+}
+```
+
+**GCP Override Examples:**
+```hcl
+# Example 1: Override GCP data source
+mock_provider "google" {
+  alias = "mock"
+}
+
+run "test_with_gcp_override_data" {
+  command = plan
+
+  providers = {
+    google = google.mock
+  }
+
+  override_data {
+    target = data.google_project.current
+    values = {
+      project_id = "test-project-123"
+      number     = "123456789012"
+      name       = "Test Project"
+    }
+  }
+}
+
+# Example 2: Override GCP network module
+run "test_gcp_module_override" {
+  command = plan
+
+  providers = {
+    google = google.mock
+  }
+
+  override_module {
+    target = module.vpc
+    outputs = {
+      network_name       = "test-vpc"
+      network_self_link  = "https://www.googleapis.com/compute/v1/projects/test-project/global/networks/test-vpc"
+      subnet_names       = ["test-subnet-1", "test-subnet-2"]
+    }
+  }
+}
+```
+
+**Key Rule:** `override_resource` and `override_data` do NOT eliminate the need for `mock_provider`. They work together - the mock provider prevents real AWS calls, while overrides provide specific test values.
 
 ### Module Testing Examples
 
@@ -1003,6 +1388,11 @@ run "test_resource_validation" {
 - Verify resource dependencies are correctly established
 - Test lifecycle rules (create_before_destroy, prevent_destroy)
 
+**Provider-Specific Resource Tests:**
+- **AWS:** Test security group rules, IAM policy attachments, S3 bucket configurations
+- **Azure:** Test resource group dependencies, network security group associations, storage account configurations
+- **GCP:** Test project references, network peering configurations, service account bindings
+
 ### Logic and Computation Tests
 #### Function Testing
 
@@ -1030,21 +1420,27 @@ run "test_resource_validation" {
 - Test module accepts valid input combinations
 - Verify module rejects invalid input combinations using expect_failures
 - Test optional vs required variables
-- Validate variable descriptions exist
+- **Multi-Cloud:** Test provider-specific required inputs (AWS region, Azure location, GCP project)
 
 #### Output Contract Testing
 
 - Test module produces all expected outputs
 - Verify output types match documentation
 - Test outputs are accessible to parent modules
-- Validate output values meet format requirements
+- **Multi-Cloud:** Validate provider-specific output formats:
+  - **AWS:** ARNs, resource IDs (e.g., `vpc-123`)
+  - **Azure:** Resource IDs (full path format), locations
+  - **GCP:** Self-links, project-qualified names
 
 #### Precondition/Postcondition Testing
 
 - Test preconditions catch invalid configurations before apply
 - Verify postconditions validate resource state after creation
 - Test custom error messages display correctly
-- Validate check blocks for non-blocking assertions
+- **Provider-Specific:** Test cloud-specific validation rules:
+  - **AWS:** Region validation, account ID checks
+  - **Azure:** Location validation, subscription checks
+  - **GCP:** Project validation, zone/region checks
 
 ### Provider and Version Tests
 #### Provider Configuration
@@ -1171,14 +1567,21 @@ run "invalid_input" {
 - Test state consistency after failures
 
 ### Compliance and Standards Tests
-#### Tagging Validation
+
+#### Tagging/Labeling Validation (All Providers)
+
+- **AWS:** Test all resources have required tags (`Environment`, `Project`, `Owner`)
+- **Azure:** Test all resources have required tags (same format as AWS)
+- **GCP:** Test all resources have required labels (key-value pairs in lowercase)
+- Verify tag/label format and naming conventions
+
 ```hcl
 run "verify_tags" {
   command = plan
-  
+
   assert {
     condition = alltrue([
-      for r in plan.resource_changes : 
+      for r in plan.resource_changes :
       contains(keys(r.after.tags), "Environment")
       if can(r.after.tags)
     ])
@@ -1187,18 +1590,37 @@ run "verify_tags" {
 }
 ```
 
-#### Naming Convention Tests
+#### Naming Convention Tests (All Providers)
 
-- Test resources follow naming patterns
-- Verify naming includes required prefixes/suffixes
-- Test for naming conflicts
+- Test resources follow cloud-specific naming patterns
+- **AWS:** Verify naming includes required prefixes/suffixes
+- **Azure:** Test naming complies with Azure resource naming rules (length, characters)
+- **GCP:** Test naming follows GCP conventions (lowercase, hyphens, project prefixes)
 
-#### Security Baseline Tests
+#### Security Baseline Tests (Provider-Specific)
 
-- Test encryption is enabled where required
-- Verify public access is restricted appropriately
-- Test IAM permissions follow least privilege
-- Validate network security rules
+**AWS Security Tests:**
+- Test KMS encryption is enabled for S3, EBS, RDS
+- Verify security groups don't allow unrestricted access (0.0.0.0/0)
+- Test IAM roles use permissions boundaries
+- Validate S3 buckets block public access
+- Test VPC flow logs are enabled
+
+**Azure Security Tests:**
+- Test Azure Disk Encryption is enabled for VMs
+- Verify Network Security Groups follow least privilege
+- Test storage accounts use customer-managed keys
+- Validate storage accounts disable public blob access
+- Test Azure Policy assignments are in place
+- Verify managed identities are used (no service principals with secrets)
+
+**GCP Security Tests:**
+- Test storage buckets use customer-managed encryption keys (CMEK)
+- Verify firewall rules don't allow unrestricted access (0.0.0.0/0)
+- Test service accounts follow least privilege
+- Validate Cloud Storage buckets have uniform access control
+- Test VPC Flow Logs are enabled
+- Verify Organization Policy constraints are applied
 
 ### Performance Tests
 #### Resource Limits
@@ -1251,10 +1673,19 @@ run "security_compliance" {
 ```
 ## ⚠️ STEP 6: Command Selection Logic Table ⚠️
 
-| Command | Use Case | Can Test | Cannot Test | Example |
-|---------|----------|----------|-------------|---------|
-| `plan` | Variable validation, configuration checks | Variables (`var.x`), Locals (`local.y`), Static validations | Resource attributes (`aws_*.attr`), Computed values, Resource IDs | `var.region != ""` ✅ / `aws_instance.web.id != ""` ❌ |
-| `apply` | Full resource testing, output validation | Everything including computed attributes, resource IDs, outputs | N/A | `aws_instance.web.id != ""` ✅ |
+| Command | Use Case | Can Test | Cannot Test | Multi-Cloud Examples |
+|---------|----------|----------|-------------|---------------------| | `plan` | Variable validation, configuration checks, conditional logic | Variables (`var.x`), Locals (`local.y`), Configuration structure (`length(resource.rule)`), Static values (`resource.tags["Name"]`), Conditional counts (`length(resource)`) | Computed IDs/ARNs, Attributes referencing other resources, Any null/empty checks on computed attributes | ✅ **AWS:** `var.region != ""`, `length(aws_s3_bucket.main.rule) > 0` <br> ✅ **Azure:** `var.location != ""`, `length(azurerm_storage_account.main.network_rules) > 0` <br> ✅ **GCP:** `var.project != ""`, `length(google_storage_bucket.main.lifecycle_rule) > 0` <br> ❌ **AWS:** `aws_instance.web.id != ""` <br> ❌ **Azure:** `azurerm_storage_account.main.id != null` <br> ❌ **GCP:** `google_storage_bucket.main.self_link != ""` |
+| `apply` | Full resource testing, output validation, real infrastructure | Everything including computed attributes, resource IDs, outputs, cross-resource references | N/A (creates real resources, may cost money) | ✅ **AWS:** `aws_instance.web.id != ""`, `aws_s3_bucket.main.arn != ""` <br> ✅ **Azure:** `azurerm_storage_account.main.id != null`, `azurerm_resource_group.main.location == "eastus"` <br> ✅ **GCP:** `google_storage_bucket.main.self_link != ""`, `google_compute_instance.main.instance_id != ""` |
+
+**Critical Notes:**
+- Even with `mock_provider`, `command = plan` cannot access attributes that reference computed values from other resources
+- Use `for` expressions to iterate over set-type attributes (cannot use `[0]` indexing on sets)
+- When testing encryption/configuration always exists: check `length(resource.rule) > 0`, NOT `resource.bucket != null`
+
+**Provider-Specific Computed Attributes to Avoid with `command = plan`:**
+- **AWS:** `.id`, `.arn`, `.dns_name`, `.endpoint`, `.hosted_zone_id`
+- **Azure:** `.id`, `.resource_group_name` (when referencing), `.principal_id`, `.identity`
+- **GCP:** `.id`, `.self_link`, `.instance_id`, `.number`, `.member`
 
 ## ⚠️ STEP 7: Best Practices Checklist ⚠️
 
@@ -1319,20 +1750,43 @@ Before finalizing:
 
 **🚫 CRITICAL: Each phase must be completed before proceeding to the next**
 
-## ⚠️ STEP 8: MANDATORY COMPLETION CHECKLIST - ALL MUST BE GENERATED: ⚠️
+## ⚠️ STEP 8: MANDATORY COMPLETION CHECKLIST - ALL MUST BE GENERATED ⚠️
 
 Before submitting ANY test file:
-☐ **CRITICAL**: No `command = plan` tests contain resource attribute assertions
-☐ All `command = plan` tests only assert variables, locals, or static logic
-☐ All resource attribute tests use `command = apply`
-☐ Unit Tests with mock_provider (unit_*.tftest.hcl)
-☐ Integration Tests with real provider + command = apply (integration_*.tftest.hcl)
-☐ Mock Tests with override patterns (mock_*.tftest.hcl)
-☐ Variable validation tests with expect_failures
-☐ Coverage report table (coverage_report.md)
-☐ README documentation (README.md)
+- [ ] **CRITICAL**: No `command = plan` tests contain computed resource attribute assertions (even with mocks)
+- [ ] **CRITICAL**: No assertions check provider-specific computed attributes with `command = plan`:
+  - AWS: `.bucket`, `.id`, `.arn`, `.dns_name`, `.endpoint`
+  - Azure: `.id`, `.resource_group_name` (when referencing), `.principal_id`
+  - GCP: `.id`, `.self_link`, `.instance_id`, `.number`
+- [ ] **CRITICAL**: Set-type attributes use `for` expressions, NOT index notation `[0]`
+- [ ] All `command = plan` tests only assert variables, locals, configuration structure, or static values
+- [ ] All computed attribute tests (IDs, ARNs, cross-resource refs) use `command = apply`
+- [ ] **CLOUD PROVIDER**: Detected cloud provider(s) and adapted test syntax accordingly
+- [ ] Unit Tests with correct mock_provider for detected cloud:
+  - AWS: `mock_provider "aws"` (unit_*.tftest.hcl)
+  - Azure: `mock_provider "azurerm"` (unit_*.tftest.hcl)
+  - GCP: `mock_provider "google"` (unit_*.tftest.hcl)
+- [ ] Integration Tests with real provider + command = apply (integration_*.tftest.hcl)
+- [ ] Mock Tests with override patterns (mock_*.tftest.hcl)
+- [ ] Variable validation tests with expect_failures
+- [ ] Coverage report table (coverage_report.md) - SIMPLE format, no complex calculations
+- [ ] README documentation (README.md) with provider-specific setup instructions
 
+**Common Mistakes to Avoid (Multi-Cloud):**
+- ❌ AWS: `condition = resource.encryption.bucket != null` with `command = plan`
+- ❌ Azure: `condition = azurerm_storage_account.main.id != null` with `command = plan`
+- ❌ GCP: `condition = google_storage_bucket.main.self_link != ""` with `command = plan`
+- ❌ `condition = resource.rule[0].algorithm == "AES256"` (sets need for expressions)
+- ❌ Using `override_resource` without defining `mock_provider` (will ask for cloud credentials)
+- ❌ Forgetting provider-specific syntax in run blocks:
+  - AWS: `providers = { aws = aws.mock }`
+  - Azure: `providers = { azurerm = azurerm.mock }`
+  - GCP: `providers = { google = google.mock }`
+- ✅ `condition = length(resource.encryption.rule) > 0` with `command = plan`
+- ✅ `condition = length([for rule in resource.rule : rule if rule.algorithm == "AES256"]) > 0`
+- ✅ Always define `mock_provider` at file level for mock tests
+- ✅ Always include correct `providers = { ... }` mapping in every run block using mocks
 
 ---
 
-*Note: If uncertain about any syntax or pattern, reference the official documentation rather than making assumptions. Quality and correctness take precedence over speed.*
+**Note:** If uncertain about any syntax or pattern, reference the official documentation rather than making assumptions. Quality and correctness take precedence over speed. Always check provider-specific documentation for the detected cloud provider(s).
