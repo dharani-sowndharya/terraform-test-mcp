@@ -367,9 +367,10 @@ run "environment_secret_naming_consistency" {
     condition = var.environment == "dev"  # ← You just set this!
     error_message = "Environment should be dev"
   }
+  ```
 
-  ✅ MEANINGFUL (DO THIS):
-
+  #### ✅ MEANINGFUL (DO THIS):
+  ```hcl
   variables {
     create_security_group = true
     additional_security_group_ids = ["sg-123"]
@@ -380,6 +381,7 @@ run "environment_secret_naming_consistency" {
     condition = var.create_security_group ? length(local.security_group_ids) >= 2 : length(local.security_group_ids) == 1
     error_message = "Security group IDs logic is incorrect"
   }
+  ```
 
   What Makes a Good Unit Test:
 
